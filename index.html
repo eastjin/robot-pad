@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f141b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>로봇 조종기</title>
+<style>
+  :root {
+    --bg: #0f141b;
+    --card: #18202b;
+    --line: #2a3544;
+    --text: #e8edf3;
+    --muted: #8a97a8;
+    --accent: #3fa7ff;
+    --ok: #3ccf7a;
+    --warn: #ffb347;
+    --bad: #ff5d5d;
+    --tri: #3ccf9a;
+    --cir: #ff6b6b;
+    --cro: #6b9bff;
+    --squ: #e07bff;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif;
+    display: flex; flex-direction: column; min-height: 100vh;
+    padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+    user-select: none; -webkit-user-select: none;
+    overscroll-behavior: none;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.02em; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    font-size: 13px; padding: 6px 12px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line); color: var(--muted);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .chip.ok { color: var(--text); border-color: #2c5a40; }
+  .chip.ok .dot { background: var(--ok); }
+  .chip.wait .dot { background: var(--warn); }
+  .chip.bad .dot { background: var(--bad); }
+
+  .bar {
+    margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  button.primary {
+    font: inherit; font-weight: 700; font-size: 16px;
+    padding: 12px 20px; border-radius: 12px; border: 0;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .5; }
+  button.ghost {
+    font: inherit; font-size: 14px; padding: 10px 14px; border-radius: 12px;
+    background: transparent; color: var(--muted); border: 1px solid var(--line); cursor: pointer;
+  }
+  button.ghost.active { color: var(--text); border-color: var(--accent); }
+  button.mini {
+    font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 8px;
+    background: #0f1620; color: var(--muted); border: 1px solid var(--line); cursor: pointer;
+  }
+  .msg { font-size: 14px; color: var(--muted); flex: 1; min-width: 200px; }
+  .msg.err { color: var(--bad); }
+
+  /* ===== 설정 패널 ===== */
+  .settings {
+    margin-top: 12px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; padding: 14px 16px;
+  }
+  .settings[hidden] { display: none; }
+  .settings h3 {
+    font-size: 14px; margin: 18px 0 10px; color: var(--text);
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  .settings h3 small { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .prow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .prow .name { font-size: 13px; color: var(--muted); }
+  .sgrid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field .name { font-size: 13px; color: var(--muted); }
+  .field .inrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  input[type=number], select {
+    font: inherit; font-size: 18px; font-weight: 700;
+    padding: 8px 10px; border-radius: 10px;
+    background: #0f1620; color: var(--text); border: 1px solid var(--line);
+  }
+  input[type=number] { width: 100%; min-width: 0; flex: 1; user-select: text; -webkit-user-select: text; }
+  select { min-width: 90px; }
+  #robotSel { min-width: 160px; font-size: 16px; }
+  input[type=number]:focus, select:focus { outline: none; border-color: var(--accent); }
+  .field .unit { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .field.wide { grid-column: 1 / -1; }
+  .field input[type=range] { width: 100%; accent-color: var(--accent); }
+  .chk {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted);
+    padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer;
+  }
+  .chk input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .curve-scale {
+    display: flex; justify-content: space-between; font-size: 11px; color: var(--muted);
+  }
+  .curve-now { font-size: 15px; font-weight: 700; color: var(--text); }
+  .srow { margin-top: 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .savemsg { font-size: 13px; color: var(--muted); }
+  .savemsg.ok { color: var(--ok); }
+  .savemsg.err { color: var(--bad); }
+
+  .stage {
+    flex: 1; margin-top: 14px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    padding: 16px; gap: 16px; min-height: 280px; position: relative;
+  }
+  .shoulders {
+    position: absolute; top: 14px; left: 16px; right: 16px;
+    display: flex; justify-content: space-between; pointer-events: none;
+  }
+  .shoulders .b { pointer-events: auto; }
+
+  .b {
+    border: 2px solid var(--line); background: #0f1620; color: var(--muted);
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    font-weight: 700; touch-action: none; cursor: pointer;
+    transition: transform .06s, background .06s, border-color .06s, color .06s;
+  }
+  .b small { font-size: 11px; font-weight: 500; margin-top: 2px; opacity: .8; }
+  .b.on { transform: scale(.94); color: #fff; }
+
+  .sh { width: 110px; height: 46px; border-radius: 12px; font-size: 15px; }
+  .sh.on { background: var(--accent); border-color: var(--accent); }
+
+  .dpad {
+    display: grid; grid-template-columns: repeat(3, 72px); grid-template-rows: repeat(3, 72px);
+    gap: 6px; justify-self: center;
+  }
+  .dpad .b { border-radius: 14px; font-size: 26px; }
+  .dpad .b.on { background: var(--accent); border-color: var(--accent); }
+  .dpad .up { grid-column: 2; grid-row: 1; }
+  .dpad .left { grid-column: 1; grid-row: 2; }
+  .dpad .right { grid-column: 3; grid-row: 2; }
+  .dpad .down { grid-column: 2; grid-row: 3; }
+
+  .face {
+    display: grid; grid-template-columns: repeat(3, 76px); grid-template-rows: repeat(3, 76px);
+    gap: 4px; justify-self: center;
+  }
+  .face .b { border-radius: 50%; font-size: 28px; }
+  .face .tri { grid-column: 2; grid-row: 1; color: var(--tri); }
+  .face .squ { grid-column: 1; grid-row: 2; color: var(--squ); }
+  .face .cir { grid-column: 3; grid-row: 2; color: var(--cir); }
+  .face .cro { grid-column: 2; grid-row: 3; color: var(--cro); }
+  .face .tri.on { background: var(--tri); border-color: var(--tri); color: #0f141b; }
+  .face .squ.on { background: var(--squ); border-color: var(--squ); color: #0f141b; }
+  .face .cir.on { background: var(--cir); border-color: var(--cir); color: #0f141b; }
+  .face .cro.on { background: var(--cro); border-color: var(--cro); color: #0f141b; }
+
+  .now { text-align: center; }
+  .now .robot { font-size: 13px; color: var(--accent); font-weight: 700; }
+  .now .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .now .cmd { font-size: 28px; font-weight: 800; margin-top: 4px; min-width: 150px; }
+  .now .key {
+    display: inline-block; margin-top: 6px; font-family: ui-monospace, monospace;
+    font-size: 13px; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 6px; padding: 2px 8px;
+  }
+  .now .spd { margin-top: 8px; font-size: 13px; color: var(--muted); }
+
+  footer { margin-top: 10px; font-size: 12px; color: var(--muted); text-align: center; }
+
+  @media (max-width: 760px) {
+    .stage { grid-template-columns: 1fr 1fr; padding-top: 74px; }
+    .now { grid-column: 1 / -1; order: -1; }
+    .dpad { grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(3, 56px); }
+    .face { grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 58px); }
+    .sh { width: 88px; }
+  }
+  @media (max-width: 420px) {
+    .stage { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>로봇 조종기</h1>
+  <div class="chips">
+    <span id="padChip" class="chip"><span class="dot"></span><span>컨트롤러 없음</span></span>
+    <span id="hubChip" class="chip"><span class="dot"></span><span>허브 미연결</span></span>
+  </div>
+</header>
+
+<div class="bar">
+  <button id="connectBtn" class="primary">허브 연결</button>
+  <button id="stopBtn" class="ghost">전체 정지</button>
+  <button id="settingsBtn" class="ghost">⚙ 설정</button>
+  <div id="msg" class="msg">듀얼쇼크 아무 버튼이나 한 번 누르면 인식돼요.</div>
+</div>
+
+<section id="settings" class="settings" hidden>
+  <div class="prow">
+    <span class="name">로봇</span>
+    <select id="robotSel"></select>
+    <button id="newBtn" class="ghost">+ 새 로봇</button>
+    <button id="renameBtn" class="ghost">이름 변경</button>
+    <button id="delBtn" class="ghost">삭제</button>
+  </div>
+
+  <h3>조종</h3>
+  <div class="sgrid">
+    <label class="field">
+      <span class="name">직진 속도</span>
+      <span class="inrow"><input type="number" id="sSpeed" inputmode="numeric"><span class="unit">mm/s</span></span>
+    </label>
+    <label class="field">
+      <span class="name">회전 속도</span>
+      <span class="inrow"><input type="number" id="sTurn" inputmode="numeric"><span class="unit">도/초</span></span>
+    </label>
+    <label class="field">
+      <span class="name">팔 속도</span>
+      <span class="inrow"><input type="number" id="sArm" inputmode="numeric"><span class="unit">도/초</span></span>
+    </label>
+    <label class="field">
+      <span class="name">집게 속도</span>
+      <span class="inrow"><input type="number" id="sGrip" inputmode="numeric"><span class="unit">도/초</span></span>
+    </label>
+    <label class="field wide">
+      <span class="name">회전 방식 · <span class="curve-now" id="curveText"></span></span>
+      <input type="range" id="sCurve" min="0" max="200" step="10">
+      <span class="curve-scale"><span>0 스핀턴</span><span>100 피벗턴</span><span>200 큰 곡선</span></span>
+    </label>
+  </div>
+
+  <h3>로봇 구조 <small>바꾸고 저장하면 허브 프로그램이 다시 시작돼요</small></h3>
+  <div class="sgrid">
+    <div class="field">
+      <span class="name">왼쪽 바퀴 포트</span>
+      <span class="inrow"><select id="sLp"></select><label class="chk"><input type="checkbox" id="sLinv">반대로</label></span>
+    </div>
+    <div class="field">
+      <span class="name">오른쪽 바퀴 포트</span>
+      <span class="inrow"><select id="sRp"></select><label class="chk"><input type="checkbox" id="sRinv">반대로</label></span>
+    </div>
+    <div class="field">
+      <span class="name">팔 포트</span>
+      <span class="inrow"><select id="sAp"></select><label class="chk"><input type="checkbox" id="sAinv">반대로</label></span>
+    </div>
+    <div class="field">
+      <span class="name">집게 포트</span>
+      <span class="inrow"><select id="sGp"></select><label class="chk"><input type="checkbox" id="sGinv">반대로</label></span>
+    </div>
+    <div class="field">
+      <span class="name">바퀴 지름</span>
+      <span class="inrow"><input type="number" id="sWheel" inputmode="numeric"><span class="unit">mm</span></span>
+      <span class="inrow">
+        <button type="button" class="mini" data-wheel="88">큰 바퀴 88</button>
+        <button type="button" class="mini" data-wheel="56">기본 바퀴 56</button>
+      </span>
+    </div>
+    <div class="field">
+      <span class="name">바퀴 간격 (양쪽 바퀴 가운데끼리)</span>
+      <span class="inrow"><input type="number" id="sAxle" inputmode="numeric"><span class="unit">mm</span></span>
+    </div>
+  </div>
+
+  <div class="srow">
+    <button id="saveBtn" class="primary">저장</button>
+    <button id="resetBtn" class="ghost">기본값으로</button>
+    <span id="saveMsg" class="savemsg"></span>
+  </div>
+</section>
+
+<section class="stage">
+  <div class="shoulders">
+    <div class="b sh" data-btn="l1">L1<small>속도 ↓</small></div>
+    <div class="b sh" data-btn="r1">R1<small>속도 ↑</small></div>
+  </div>
+
+  <div class="dpad">
+    <div class="b up" data-btn="up">▲</div>
+    <div class="b left" data-btn="left">◀</div>
+    <div class="b right" data-btn="right">▶</div>
+    <div class="b down" data-btn="down">▼</div>
+  </div>
+
+  <div class="now">
+    <div class="robot" id="robotName"></div>
+    <div class="label">현재 동작</div>
+    <div class="cmd" id="cmdText">정지</div>
+    <div class="key" id="cmdKey">S</div>
+    <div class="spd" id="spdText"></div>
+  </div>
+
+  <div class="face">
+    <div class="b tri" data-btn="triangle">△<small>팔 ↑</small></div>
+    <div class="b squ" data-btn="square">□<small>팔 ↓</small></div>
+    <div class="b cir" data-btn="circle">○<small>펴기</small></div>
+    <div class="b cro" data-btn="cross">✕<small>잡기</small></div>
+  </div>
+</section>
+
+<footer>화면 버튼을 손가락으로 눌러도 조종돼요 · Pybricks Code 탭은 닫고 연결하세요</footer>
+
+<script>
+// ===== 파이브릭스 허브 BLE 정보 (고정값) =====
+const PYBRICKS_SERVICE = "c5f50001-8280-46da-89f4-6d8051e4aeef";
+const PYBRICKS_CHAR    = "c5f50002-8280-46da-89f4-6d8051e4aeef";
+const CMD_STOP_PROGRAM  = 0x00;
+const CMD_START_PROGRAM = 0x01;
+const CMD_WRITE_STDIN   = 0x06;
+const EVENT_STATUS      = 0x00;
+const EVENT_STDOUT      = 0x01;
+const FLAG_LOW_BATTERY     = 1 << 0;
+const FLAG_PROGRAM_RUNNING = 1 << 6;
+const KEEPALIVE_MS = 250;   // 허브에 "앱 살아 있음" 신호 보내는 간격 (허브는 1초 끊기면 정지)
+
+// ===== 크롬 표준 게임패드 버튼 번호 (듀얼쇼크) =====
+const BTN = {
+  cross: 0, circle: 1, square: 2, triangle: 3,
+  l1: 4, r1: 5,
+  up: 12, down: 13, left: 14, right: 15,
+};
+
+// 우선순위 순서대로: [버튼 이름, 허브로 보낼 글자]
+const ORDER = [
+  ["up", "F"], ["down", "B"], ["left", "L"], ["right", "R"],
+  ["triangle", "T"], ["square", "Q"], ["cross", "X"], ["circle", "O"],
+];
+
+const LABEL = {
+  F: "앞으로", B: "뒤로", L: "왼쪽 회전", R: "오른쪽 회전",
+  T: "팔 올리기", Q: "팔 내리기", X: "집게 잡기", O: "집게 펴기", S: "정지",
+};
+
+// ===== 로봇 설정 =====
+const PORTS = ["A", "B", "C", "D", "E", "F"];
+const DEFAULTS = {
+  name: "로봇 1",
+  // 조종
+  speed: 200, turn: 120, curve: 0, arm: 300, grip: 300,
+  // 구조
+  lp: "E", rp: "F", ap: "A", gp: "D",
+  linv: true, rinv: false, ainv: false, ginv: false,
+  wheel: 88, axle: 112,
+};
+const NUM_LIMITS = {
+  speed: [50, 800], turn: [30, 500], curve: [0, 200], arm: [50, 1000], grip: [50, 1000],
+  wheel: [20, 200], axle: [40, 300],
+};
+const STRUCT_KEYS = ["lp", "rp", "ap", "gp", "linv", "rinv", "ainv", "ginv", "wheel", "axle"];
+const SPEED_STEP = 50;
+const STORE_KEY = "robot-pad-v3";
+const OLD_STORE_KEY = "robot-pad-settings";
+
+// ===== 화면 요소 =====
+const $ = (id) => document.getElementById(id);
+const connectBtn = $("connectBtn");
+const msg = $("msg");
+const btnEls = {};
+document.querySelectorAll("[data-btn]").forEach((el) => { btnEls[el.dataset.btn] = el; });
+
+const inp = {
+  speed: $("sSpeed"), turn: $("sTurn"), curve: $("sCurve"), arm: $("sArm"), grip: $("sGrip"),
+  lp: $("sLp"), rp: $("sRp"), ap: $("sAp"), gp: $("sGp"),
+  linv: $("sLinv"), rinv: $("sRinv"), ainv: $("sAinv"), ginv: $("sGinv"),
+  wheel: $("sWheel"), axle: $("sAxle"),
+};
+
+// 포트 선택칸 채우기 (팔·집게는 "없음" 가능)
+function fillPortSelect(sel, allowNone) {
+  sel.innerHTML = "";
+  for (const p of PORTS) sel.add(new Option(p, p));
+  if (allowNone) sel.add(new Option("없음", "-"));
+}
+fillPortSelect(inp.lp, false);
+fillPortSelect(inp.rp, false);
+fillPortSelect(inp.ap, true);
+fillPortSelect(inp.gp, true);
+
+function setChip(id, state, text) {
+  const el = $(id);
+  el.className = "chip " + state;
+  el.lastElementChild.textContent = text;
+}
+function setMsg(text, isErr) {
+  msg.textContent = text;
+  msg.className = "msg" + (isErr ? " err" : "");
+}
+function setSaveMsg(text, kind) {
+  const el = $("saveMsg");
+  el.textContent = text;
+  el.className = "savemsg" + (kind ? " " + kind : "");
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ===== 저장소: 로봇 여러 대 =====
+let store = { current: "r1", robots: { r1: { ...DEFAULTS } } };
+const cur = () => store.robots[store.current];
+
+function normalize(r) {
+  const out = { ...DEFAULTS, ...r };
+  for (const k in NUM_LIMITS) {
+    const [lo, hi] = NUM_LIMITS[k];
+    let v = Math.round(Number(out[k]));
+    if (!Number.isFinite(v)) v = DEFAULTS[k];
+    out[k] = Math.min(hi, Math.max(lo, v));
+  }
+  for (const k of ["lp", "rp"]) if (!PORTS.includes(out[k])) out[k] = DEFAULTS[k];
+  for (const k of ["ap", "gp"]) if (!PORTS.includes(out[k]) && out[k] !== "-") out[k] = DEFAULTS[k];
+  for (const k of ["linv", "rinv", "ainv", "ginv"]) out[k] = !!out[k];
+  out.name = String(out.name || "로봇").slice(0, 20);
+  return out;
+}
+
+function loadStore() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (saved && saved.robots && Object.keys(saved.robots).length) {
+      store = saved;
+      for (const id in store.robots) store.robots[id] = normalize(store.robots[id]);
+      if (!store.robots[store.current]) store.current = Object.keys(store.robots)[0];
+      return;
+    }
+    // 예전 버전 설정 옮겨오기
+    const old = JSON.parse(localStorage.getItem(OLD_STORE_KEY) || "null");
+    if (old) store.robots.r1 = normalize({ ...old, wheel: DEFAULTS.wheel });
+  } catch (e) { /* 저장값 없으면 기본값 */ }
+}
+function persist() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); return true; }
+  catch (e) { return false; }
+}
+
+// ===== 설정 화면 =====
+function curveLabel(c) {
+  if (c === 0) return "스핀턴 (제자리 회전)";
+  if (c < 100) return "스핀턴과 피벗턴 사이";
+  if (c === 100) return "피벗턴 (안쪽 바퀴 고정)";
+  return "큰 곡선으로 회전";
+}
+
+function fillInputs(r) {
+  for (const k in inp) {
+    if (inp[k].type === "checkbox") inp[k].checked = r[k];
+    else inp[k].value = r[k];
+  }
+  $("curveText").textContent = curveLabel(r.curve);
+}
+function readInputs() {
+  const now = cur();
+  const r = { name: now.name };
+  for (const k in inp) {
+    if (inp[k].type === "checkbox") { r[k] = inp[k].checked; continue; }
+    const v = inp[k].value;
+    // 숫자 칸을 비우거나 숫자가 아닌 걸 넣으면 원래 값 유지
+    if (k in NUM_LIMITS && (String(v).trim() === "" || !Number.isFinite(Number(v)))) r[k] = now[k];
+    else r[k] = v;
+  }
+  return normalize(r);
+}
+function refreshRobotList() {
+  const sel = $("robotSel");
+  sel.innerHTML = "";
+  for (const id in store.robots) sel.add(new Option(store.robots[id].name, id));
+  sel.value = store.current;
+  $("delBtn").disabled = Object.keys(store.robots).length < 2;
+}
+function showSummary() {
+  const r = cur();
+  $("robotName").textContent = r.name;
+  $("spdText").textContent = `직진 ${r.speed} · 회전 ${r.turn}`;
+}
+function showAll() {
+  refreshRobotList();
+  fillInputs(cur());
+  showSummary();
+}
+
+function portProblem(r) {
+  const used = [r.lp, r.rp, r.ap, r.gp].filter((p) => p !== "-");
+  if (new Set(used).size !== used.length) return "같은 포트를 두 번 골랐어요. 포트를 다르게 해 주세요.";
+  return null;
+}
+
+inp.curve.addEventListener("input", () => {
+  $("curveText").textContent = curveLabel(Number(inp.curve.value));
+});
+document.querySelectorAll("[data-wheel]").forEach((b) => {
+  b.addEventListener("click", () => { inp.wheel.value = b.dataset.wheel; });
+});
+
+$("saveBtn").addEventListener("click", () => {
+  const r = readInputs();
+  const problem = portProblem(r);
+  if (problem) { setSaveMsg(problem, "err"); return; }
+
+  const structChanged = STRUCT_KEYS.some((k) => r[k] !== cur()[k]);
+  store.robots[store.current] = r;
+  const ok = persist();
+  fillInputs(r);
+  showSummary();
+
+  if (ch) {
+    if (structChanged) {
+      restartHub();
+      setSaveMsg("저장됨 · 로봇 구조가 바뀌어 허브를 다시 시작해요", "ok");
+    } else {
+      sendSettings();
+      setSaveMsg("저장됨 · 허브에 적용됨", "ok");
+    }
+  } else {
+    setSaveMsg(ok ? "저장됨 · 허브 연결하면 자동 적용" : "이 기기에 저장 실패", ok ? "ok" : "err");
+  }
+});
+
+$("resetBtn").addEventListener("click", () => {
+  fillInputs({ ...DEFAULTS, name: cur().name });
+  setSaveMsg("기본값을 불러왔어요. 저장을 눌러 적용하세요.");
+});
+
+$("robotSel").addEventListener("change", (e) => {
+  store.current = e.target.value;
+  persist();
+  showAll();
+  setSaveMsg(`'${cur().name}' 설정으로 바꿨어요`, "ok");
+  if (ch) restartHub();
+});
+
+$("newBtn").addEventListener("click", () => {
+  const n = Object.keys(store.robots).length + 1;
+  const name = prompt("새 로봇 이름", `로봇 ${n}`);
+  if (name === null) return;
+  const id = "r" + Date.now();
+  store.robots[id] = normalize({ ...readInputs(), name: name.trim() || `로봇 ${n}` });
+  store.current = id;
+  persist();
+  showAll();
+  setSaveMsg("지금 설정을 복사해서 새 로봇을 만들었어요", "ok");
+  if (ch) restartHub();
+});
+
+$("renameBtn").addEventListener("click", () => {
+  const name = prompt("로봇 이름", cur().name);
+  if (name === null || !name.trim()) return;
+  cur().name = name.trim().slice(0, 20);
+  persist();
+  showAll();
+});
+
+$("delBtn").addEventListener("click", () => {
+  if (Object.keys(store.robots).length < 2) return;
+  if (!confirm(`'${cur().name}' 설정을 삭제할까요?`)) return;
+  delete store.robots[store.current];
+  store.current = Object.keys(store.robots)[0];
+  persist();
+  showAll();
+  if (ch) restartHub();
+});
+
+$("settingsBtn").addEventListener("click", () => {
+  const panel = $("settings");
+  panel.hidden = !panel.hidden;
+  $("settingsBtn").classList.toggle("active", !panel.hidden);
+});
+
+loadStore();
+showAll();
+
+// ===== 지원 여부 확인 =====
+if (!navigator.bluetooth) {
+  setMsg("이 브라우저는 블루투스를 지원하지 않아요. 안드로이드/PC의 크롬으로, https 주소에서 열어 주세요.", true);
+  connectBtn.disabled = true;
+}
+
+// ===== 블루투스 연결 =====
+let device = null;
+let ch = null;
+let ready = false;        // 허브가 명령 받을 준비가 됐는지
+let configSent = false;
+let last = null;
+let waitTimer = null, readyTimer = null;
+let hubErrors = [];       // 이번 시작에서 허브가 알려 준 오류
+let programRunning = null;
+let lowBatteryShown = false;
+
+function setConnectBtn(text, enabled) {
+  connectBtn.textContent = text;
+  connectBtn.disabled = !enabled;
+}
+
+async function connect() {
+  try {
+    if (!device) {
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [PYBRICKS_SERVICE] }],
+      });
+      device.addEventListener("gattserverdisconnected", onDisconnected);
+    }
+    setChip("hubChip", "wait", "연결 중...");
+    setConnectBtn("연결 중...", false);
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(PYBRICKS_SERVICE);
+    ch = await service.getCharacteristic(PYBRICKS_CHAR);
+    programRunning = null;
+
+    // 허브가 보내는 메시지 받기 (준비 완료, 오류, 상태)
+    ch.addEventListener("characteristicvaluechanged", onNotify);
+    try { await ch.startNotifications(); } catch (e) { /* 없어도 동작은 함 */ }
+
+    setChip("hubChip", "ok", device.name || "허브 연결됨");
+    keepScreenOn();
+    await restartHub();
+  } catch (e) {
+    ch = null;
+    setConnectBtn(device ? "다시 연결" : "허브 연결", true);
+    const m = String(e.message || "");
+    if (e.name === "NotFoundError" && /cancel/i.test(m)) {
+      setChip("hubChip", "", "허브 미연결");
+      setMsg("허브 선택이 취소됐어요.");
+    } else if (e.name === "NotFoundError") {
+      setChip("hubChip", "bad", "블루투스 없음");
+      setMsg("블루투스를 찾을 수 없어요. 기기 블루투스가 켜져 있는지 확인해 주세요.", true);
+    } else {
+      setChip("hubChip", "bad", "연결 실패");
+      setMsg("연결 실패: " + m + " (Pybricks Code 탭이 열려 있으면 닫아 주세요)", true);
+    }
+  }
+}
+
+function onDisconnected() {
+  ch = null;
+  ready = false;
+  queue.length = 0;
+  clearTimeout(waitTimer); clearTimeout(readyTimer);
+  setChip("hubChip", "bad", "연결 끊김");
+  setMsg("허브 연결이 끊겼어요. 로봇은 1초 안에 스스로 멈춰요. '다시 연결'을 눌러 주세요.", true);
+  setConnectBtn("다시 연결", true);
+}
+
+// 버튼 하나로: 연결 안 됨 → 연결 / 연결됐는데 프로그램 멈춤 → 다시 시작
+connectBtn.addEventListener("click", () => {
+  if (ch) restartHub();
+  else connect();
+});
+
+// 블루투스 쓰기는 한 번에 하나씩만 → 줄 세워서 차례로
+let chain = Promise.resolve();
+function gattWrite(bytes) {
+  const p = chain.then(() => {
+    if (!ch) throw new Error("연결 안 됨");
+    return ch.writeValueWithResponse ? ch.writeValueWithResponse(bytes) : ch.writeValue(bytes);
+  });
+  chain = p.catch(() => {});
+  return p;
+}
+
+// 허브 프로그램 다시 시작 → 허브가 "WAIT"을 보내면 로봇 구조·설정 전송 → "READY" 오면 조종 시작
+async function restartHub() {
+  ready = false;
+  configSent = false;
+  last = null;
+  hubErrors = [];
+  queue.length = 0;
+  clearTimeout(waitTimer); clearTimeout(readyTimer);
+  setConnectBtn("시작 중...", false);
+  setMsg("허브 프로그램 시작 중...");
+
+  try { await gattWrite(new Uint8Array([CMD_STOP_PROGRAM])); } catch (e) {}
+  await sleep(400);
+  try { await gattWrite(new Uint8Array([CMD_START_PROGRAM])); } catch (e) {}
+
+  // 허브 응답(WAIT)이 없으면 2초 뒤 그냥 보냄 (알림이 안 되는 기기 대비)
+  waitTimer = setTimeout(sendConfigOnce, 2000);
+  // READY가 끝내 안 오면 6초 뒤 조종은 허용 (예전 허브 코드 대비)
+  readyTimer = setTimeout(() => {
+    if (!ready && ch) {
+      markReady();
+      setMsg("조종하세요! (허브 응답이 없어요. 허브 코드가 최신인지 확인해 주세요)", true);
+    }
+  }, 6000);
+}
+
+function markReady() {
+  ready = true;
+  clearTimeout(readyTimer);
+  setConnectBtn("연결됨", false);
+}
+
+// ===== 허브가 보내는 메시지 =====
+const decoder = new TextDecoder();
+let outBuf = "";
+function onNotify(e) {
+  const dv = e.target.value;
+  const v = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+  if (v[0] === EVENT_STATUS && v.length >= 5) {
+    handleStatus(v[1] | (v[2] << 8) | (v[3] << 16) | (v[4] << 24));
+    return;
+  }
+  if (v[0] !== EVENT_STDOUT) return;
+  outBuf += decoder.decode(v.slice(1), { stream: true });
+  let i;
+  while ((i = outBuf.indexOf("\n")) >= 0) {
+    const line = outBuf.slice(0, i).trim();
+    outBuf = outBuf.slice(i + 1);
+    if (line) handleHubLine(line);
+  }
+  if (outBuf.length > 500) outBuf = "";   // 줄바꿈 없는 이상한 출력 방지
+}
+
+function handleHubLine(line) {
+  if (line === "WAIT") {
+    // 허브가 구조 정보를 기다리는 중 → 항상 (다시) 보냄
+    configSent = true;
+    clearTimeout(waitTimer);
+    sendConfig();
+    sendSettings();
+  } else if (line === "READY") {
+    markReady();
+    if (hubErrors.length) setMsg("준비 완료, 하지만 확인 필요: " + hubErrors.join(" / "), true);
+    else setMsg(`준비 완료! '${cur().name}' 조종하세요.`);
+  } else if (line.startsWith("ERR")) {
+    const text = line.slice(3).trim();
+    if (!ready) hubErrors.push(text);
+    setMsg(text, true);
+  } else {
+    console.log("허브:", line);
+  }
+}
+
+function handleStatus(flags) {
+  const running = !!(flags & FLAG_PROGRAM_RUNNING);
+  // 조종 중이었는데 프로그램이 꺼짐 (허브 버튼, 오류, 배터리 등)
+  if (ready && programRunning === true && !running) {
+    ready = false;
+    setMsg("허브 프로그램이 멈췄어요 (허브 버튼을 눌렀거나 오류). '다시 시작'을 눌러 주세요.", true);
+    setConnectBtn("다시 시작", true);
+  }
+  programRunning = running;
+
+  const low = !!(flags & FLAG_LOW_BATTERY);
+  if (low && !lowBatteryShown) {
+    lowBatteryShown = true;
+    setChip("hubChip", "wait", (device && device.name ? device.name + " · " : "") + "배터리 부족");
+  } else if (!low && lowBatteryShown) {
+    lowBatteryShown = false;
+    setChip("hubChip", "ok", (device && device.name) || "허브 연결됨");
+  }
+}
+
+// ===== 전송 =====
+// 조종 명령은 가장 최근 것만, 설정 줄은 빠짐없이 보냄
+const queue = [];
+let busy = false;
+
+function send(cmd) {
+  for (let i = queue.length - 1; i >= 0; i--) if (queue[i].kind === "cmd") queue.splice(i, 1);
+  queue.push({ kind: "cmd", data: cmd });
+  if (!busy) flush();
+}
+function sendLine(line) {
+  queue.push({ kind: "line", data: line, tries: 0 });
+  if (!busy) flush();
+}
+
+// 로봇 구조:  C왼오팔집,지름,간격,방향  예) Cefad,88,112,1
+// (포트는 소문자, 없음은 x. 대문자를 쓰면 조종 명령과 헷갈려서)
+function sendConfig() {
+  const r = cur();
+  const port = (p) => (p === "-" ? "x" : p.toLowerCase());
+  const flags = (r.linv ? 1 : 0) | (r.rinv ? 2 : 0) | (r.ainv ? 4 : 0) | (r.ginv ? 8 : 0);
+  sendLine(`C${port(r.lp)}${port(r.rp)}${port(r.ap)}${port(r.gp)},${r.wheel},${r.axle},${flags}\n`);
+}
+// 조종 설정:  P직진,회전,곡선,팔,집게  예) P200,120,0,300,300
+function sendSettings() {
+  const r = cur();
+  sendLine(`P${r.speed},${r.turn},${r.curve},${r.arm},${r.grip}\n`);
+}
+function sendConfigOnce() {
+  if (configSent || !ch) return;
+  configSent = true;
+  sendConfig();
+  sendSettings();
+}
+
+async function flush() {
+  busy = true;
+  while (queue.length && ch) {
+    const item = queue.shift();
+    const bytes = new TextEncoder().encode(item.data);
+    try {
+      // 한 번에 보낼 수 있는 크기가 작아서 19바이트씩 나눠 보냄
+      for (let i = 0; i < bytes.length; i += 19) {
+        const chunk = bytes.slice(i, i + 19);
+        const pkt = new Uint8Array(chunk.length + 1);
+        pkt[0] = CMD_WRITE_STDIN;
+        pkt.set(chunk, 1);
+        await gattWrite(pkt);
+      }
+    } catch (e) {
+      console.warn("전송 실패", e);
+      if (item.kind === "cmd") {
+        // 조종 명령 실패 → 다음 화면 갱신 때 현재 버튼 상태를 다시 보냄 (정지 명령이 묻히지 않게)
+        last = null;
+      } else if (item.tries < 2 && ch) {
+        item.tries++;
+        queue.unshift(item);          // 설정 줄은 두 번까지 다시 시도
+        await sleep(50);
+      }
+    }
+  }
+  busy = false;
+}
+
+// 연결 유지 신호: 보낼 게 없을 때만 "." 한 글자 (설정 줄 사이에 끼어들지 않게)
+setInterval(() => {
+  if (ch && ready && !busy && queue.length === 0) {
+    gattWrite(new Uint8Array([CMD_WRITE_STDIN, 0x2e])).catch(() => {});
+  }
+}, KEEPALIVE_MS);
+
+// ===== L1 / R1: 직진 속도 조절 =====
+function bumpSpeed(dir) {
+  const r = cur();
+  const [lo, hi] = NUM_LIMITS.speed;
+  r.speed = Math.min(hi, Math.max(lo, r.speed + dir * SPEED_STEP));
+  persist();
+  inp.speed.value = r.speed;
+  showSummary();
+  if (ch && ready) sendSettings();
+  setMsg(`직진 속도 ${r.speed} mm/s`);
+}
+
+// ===== 화면 터치 버튼 =====
+const touchHeld = new Set();
+Object.entries(btnEls).forEach(([name, el]) => {
+  const down = (e) => { e.preventDefault(); touchHeld.add(name); el.setPointerCapture?.(e.pointerId); };
+  const up = () => touchHeld.delete(name);
+  el.addEventListener("pointerdown", down);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+  el.addEventListener("lostpointercapture", up);
+});
+
+// ===== 메인 루프 =====
+function getPad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const p of pads) if (p && p.connected) return p;
+  return null;
+}
+
+let padShown = null;
+let prevL1 = false, prevR1 = false;
+
+function loop() {
+  const pad = getPad();
+
+  const padName = pad ? pad.id + "|" + pad.mapping : null;
+  if (padName !== padShown) {
+    padShown = padName;
+    if (!pad) setChip("padChip", "", "컨트롤러 없음");
+    else if (pad.mapping !== "standard") {
+      setChip("padChip", "wait", "컨트롤러 연결됨 (비표준 배치)");
+      setMsg("이 컨트롤러는 버튼 배치가 표준이 아니라서 일부 버튼이 다르게 동작할 수 있어요.", true);
+    } else setChip("padChip", "ok", "컨트롤러 연결됨");
+  }
+
+  const pressed = (name) => {
+    if (touchHeld.has(name)) return true;
+    const b = pad && pad.buttons[BTN[name]];
+    return !!(b && b.pressed);
+  };
+
+  for (const name in btnEls) btnEls[name].classList.toggle("on", pressed(name));
+
+  // L1/R1: 눌린 순간에만 한 번
+  const l1 = pressed("l1"), r1 = pressed("r1");
+  if (l1 && !prevL1) bumpSpeed(-1);
+  if (r1 && !prevR1) bumpSpeed(+1);
+  prevL1 = l1; prevR1 = r1;
+
+  let cmd = "S";
+  if (!document.hidden) {   // 화면이 안 보일 땐 무조건 정지
+    for (const [name, c] of ORDER) {
+      if (pressed(name)) { cmd = c; break; }
+    }
+  }
+  $("cmdText").textContent = LABEL[cmd];
+  $("cmdKey").textContent = cmd;
+
+  if (ch && ready && cmd !== last) {
+    last = cmd;
+    send(cmd);
+  }
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ===== 안전장치 =====
+$("stopBtn").addEventListener("click", () => { last = "S"; if (ch && ready) send("S"); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && ch && ready) { last = "S"; send("S"); }
+});
+window.addEventListener("gamepadconnected", () => setMsg("컨트롤러가 연결됐어요."));
+window.addEventListener("gamepaddisconnected", () => setMsg("컨트롤러 연결이 끊겼어요. 로봇은 정지합니다.", true));
+
+// 조종 중 화면 꺼짐 방지
+let wakeLock = null;
+async function keepScreenOn() {
+  try {
+    if ("wakeLock" in navigator && !wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    }
+  } catch (e) { /* 지원 안 하면 무시 */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && ch) keepScreenOn();
+});
+
+// ===== 오프라인 사용 (PWA) =====
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>

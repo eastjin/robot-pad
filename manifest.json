@@ -1,0 +1,15 @@
+{
+  "name": "로봇 조종기",
+  "short_name": "로봇조종",
+  "description": "듀얼쇼크로 파이브릭스 허브 조종",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0f141b",
+  "theme_color": "#0f141b",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
