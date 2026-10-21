@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0f141b">
+<script>
+  // 저장된 화면 색을 화면 그리기 전에 먼저 적용 (깜빡임 방지)
+  try { var t = localStorage.getItem("robot-pad-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <title>로봇 조종기</title>
@@ -22,11 +26,68 @@
     --cir: #ff6b6b;
     --cro: #6b9bff;
     --squ: #e07bff;
+    --btn: #0f1620;          /* 버튼·입력칸 바탕 */
+    --okline: #2c5a40;       /* 연결됨 표시 테두리 */
+    --accentText: #04121f;   /* 강조색 위 글자 */
+    --faceOn: #0f141b;       /* 도형 버튼 눌렀을 때 글자 */
   }
+
+  /* ===== 화면 색 테마 ===== */
+  :root[data-theme="light"] {
+    --bg: #eef2f7; --card: #ffffff; --line: #d3dae4; --text: #1b2430; --muted: #5b6878;
+    --accent: #1f74d8; --ok: #1d9a52; --warn: #b86e00; --bad: #d23a3a;
+    --tri: #0f9a72; --cir: #de413b; --cro: #376ad8; --squ: #a947cc;
+    --btn: #f6f8fb; --okline: #9fd6b6; --accentText: #ffffff; --faceOn: #ffffff;
+  }
+  :root[data-theme="ocean"] {
+    --bg: #061a2b; --card: #0c2a43; --line: #1c4769; --text: #e4f4ff; --muted: #86aac6;
+    --accent: #23c4e8; --ok: #37d6a0; --warn: #ffc15c; --bad: #ff6b6b;
+    --tri: #4fe0b4; --cir: #ff7b7b; --cro: #7fb2ff; --squ: #d08cff;
+    --btn: #08223a; --okline: #1f6a5a; --accentText: #04202c; --faceOn: #061a2b;
+  }
+  :root[data-theme="forest"] {
+    --bg: #0c1a11; --card: #13281b; --line: #24442f; --text: #e8f6ec; --muted: #8fb59b;
+    --accent: #4fd27b; --ok: #4fd27b; --warn: #ffc25a; --bad: #ff6b5e;
+    --tri: #8ee86b; --cir: #ff7a6b; --cro: #6fb6ff; --squ: #d995ff;
+    --btn: #0e2116; --okline: #2f6b44; --accentText: #082010; --faceOn: #0c1a11;
+  }
+  :root[data-theme="space"] {
+    --bg: #130e23; --card: #1e1635; --line: #362a59; --text: #f0eaff; --muted: #a698ca;
+    --accent: #9d6cff; --ok: #4fd8a0; --warn: #ffc15c; --bad: #ff6b8b;
+    --tri: #5ee3b8; --cir: #ff7aa0; --cro: #7ea8ff; --squ: #e48cff;
+    --btn: #170f2b; --okline: #3c6a5e; --accentText: #ffffff; --faceOn: #130e23;
+  }
+  :root[data-theme="berry"] {
+    --bg: #fff0f5; --card: #ffffff; --line: #f2c4d5; --text: #3b1a29; --muted: #94566f;
+    --accent: #e8457f; --ok: #1d9a5a; --warn: #b86e00; --bad: #d23a3a;
+    --tri: #0f9a72; --cir: #d6304a; --cro: #3b68d6; --squ: #a33fc4;
+    --btn: #fff7fa; --okline: #9fd6b6; --accentText: #ffffff; --faceOn: #ffffff;
+  }
+  :root[data-theme="lemon"] {
+    --bg: #fffbe8; --card: #ffffff; --line: #ecdca0; --text: #3a3110; --muted: #7f6f32;
+    --accent: #f0a500; --ok: #1d9a52; --warn: #b05f00; --bad: #d23a3a;
+    --tri: #0f9a72; --cir: #d8402f; --cro: #376ad8; --squ: #a947cc;
+    --btn: #fffdf4; --okline: #a8d8b4; --accentText: #2a2000; --faceOn: #ffffff;
+  }
+
+  /* 테마 고르는 동그라미 */
+  .themes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .theme-pick {
+    font: inherit; font-size: 13px; color: var(--muted); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px 6px 6px; border-radius: 999px;
+    background: var(--btn); border: 2px solid var(--line);
+  }
+  .theme-pick .sw {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 1px solid rgba(127,127,127,.35);
+  }
+  .theme-pick[aria-pressed="true"] { border-color: var(--accent); color: var(--text); font-weight: 700; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; min-height: 100%; }
   body {
     background: var(--bg);
+    transition: background .2s, color .2s;
     color: var(--text);
     font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif;
     display: flex; flex-direction: column; min-height: 100vh;
@@ -46,7 +107,7 @@
     display: inline-flex; align-items: center; gap: 6px;
   }
   .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .chip.ok { color: var(--text); border-color: #2c5a40; }
+  .chip.ok { color: var(--text); border-color: var(--okline); }
   .chip.ok .dot { background: var(--ok); }
   .chip.wait .dot { background: var(--warn); }
   .chip.bad .dot { background: var(--bad); }
@@ -57,7 +118,7 @@
   button.primary {
     font: inherit; font-weight: 700; font-size: 16px;
     padding: 12px 20px; border-radius: 12px; border: 0;
-    background: var(--accent); color: #fff; cursor: pointer;
+    background: var(--accent); color: var(--accentText); cursor: pointer;
   }
   button.primary:disabled, button.ghost:disabled { opacity: .5; }
   button.ghost {
@@ -67,7 +128,7 @@
   button.ghost.active { color: var(--text); border-color: var(--accent); }
   button.mini {
     font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 8px;
-    background: #0f1620; color: var(--muted); border: 1px solid var(--line); cursor: pointer;
+    background: var(--btn); color: var(--muted); border: 1px solid var(--line); cursor: pointer;
   }
   .msg { font-size: 14px; color: var(--muted); flex: 1; min-width: 200px; }
   .msg.err { color: var(--bad); }
@@ -92,7 +153,7 @@
   input[type=number], select {
     font: inherit; font-size: 18px; font-weight: 700;
     padding: 8px 10px; border-radius: 10px;
-    background: #0f1620; color: var(--text); border: 1px solid var(--line);
+    background: var(--btn); color: var(--text); border: 1px solid var(--line);
   }
   input[type=number] { width: 100%; min-width: 0; flex: 1; user-select: text; -webkit-user-select: text; }
   select { min-width: 90px; }
@@ -131,13 +192,13 @@
   .shoulders .b { pointer-events: auto; }
 
   .b {
-    border: 2px solid var(--line); background: #0f1620; color: var(--muted);
+    border: 2px solid var(--line); background: var(--btn); color: var(--muted);
     display: flex; align-items: center; justify-content: center; flex-direction: column;
     font-weight: 700; touch-action: none; cursor: pointer;
     transition: transform .06s, background .06s, border-color .06s, color .06s;
   }
   .b small { font-size: 11px; font-weight: 500; margin-top: 2px; opacity: .8; }
-  .b.on { transform: scale(.94); color: #fff; }
+  .b.on { transform: scale(.94); color: var(--accentText); }
 
   .sh { width: 110px; height: 46px; border-radius: 12px; font-size: 15px; }
   .sh.on { background: var(--accent); border-color: var(--accent); }
@@ -162,10 +223,10 @@
   .face .squ { grid-column: 1; grid-row: 2; color: var(--squ); }
   .face .cir { grid-column: 3; grid-row: 2; color: var(--cir); }
   .face .cro { grid-column: 2; grid-row: 3; color: var(--cro); }
-  .face .tri.on { background: var(--tri); border-color: var(--tri); color: #0f141b; }
-  .face .squ.on { background: var(--squ); border-color: var(--squ); color: #0f141b; }
-  .face .cir.on { background: var(--cir); border-color: var(--cir); color: #0f141b; }
-  .face .cro.on { background: var(--cro); border-color: var(--cro); color: #0f141b; }
+  .face .tri.on { background: var(--tri); border-color: var(--tri); color: var(--faceOn); }
+  .face .squ.on { background: var(--squ); border-color: var(--squ); color: var(--faceOn); }
+  .face .cir.on { background: var(--cir); border-color: var(--cir); color: var(--faceOn); }
+  .face .cro.on { background: var(--cro); border-color: var(--cro); color: var(--faceOn); }
 
   .now { text-align: center; }
   .now .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -210,7 +271,10 @@
 </div>
 
 <section id="settings" class="settings" hidden>
-  <h3 style="margin-top:0">조종</h3>
+  <h3 style="margin-top:0">화면 색 <small>누르면 바로 바뀌어요</small></h3>
+  <div class="themes" id="themes"></div>
+
+  <h3>조종</h3>
   <div class="sgrid">
     <label class="field">
       <span class="name">직진 속도</span>
@@ -310,8 +374,46 @@
 
 <script>
 // ===== 앱 버전 (고칠 때마다 올리기) =====
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 document.getElementById("verText").textContent = APP_VERSION;
+
+// ===== 화면 색 테마 =====
+const THEMES = [
+  { id: "night",  name: "밤하늘", bg: "#0f141b", dot: "#3fa7ff" },
+  { id: "light",  name: "하얀색", bg: "#eef2f7", dot: "#1f74d8" },
+  { id: "ocean",  name: "바다",   bg: "#061a2b", dot: "#23c4e8" },
+  { id: "forest", name: "숲",     bg: "#0c1a11", dot: "#4fd27b" },
+  { id: "space",  name: "우주",   bg: "#130e23", dot: "#9d6cff" },
+  { id: "berry",  name: "딸기",   bg: "#fff0f5", dot: "#e8457f" },
+  { id: "lemon",  name: "레몬",   bg: "#fffbe8", dot: "#f0a500" },
+];
+function applyTheme(id, save) {
+  const t = THEMES.find((x) => x.id === id) || THEMES[0];
+  if (t.id === "night") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t.id;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", t.bg);   // 안드로이드 위쪽 상태바 색
+  document.querySelectorAll(".theme-pick").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.theme === t.id)));
+  if (save) { try { localStorage.setItem("robot-pad-theme", t.id); } catch (e) {} }
+}
+(function buildThemePicker() {
+  const box = document.getElementById("themes");
+  for (const t of THEMES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "theme-pick";
+    b.dataset.theme = t.id;
+    const sw = document.createElement("span");
+    sw.className = "sw";
+    sw.style.background = `linear-gradient(135deg, ${t.bg} 50%, ${t.dot} 50%)`;
+    b.append(sw, document.createTextNode(t.name));
+    b.addEventListener("click", () => applyTheme(t.id, true));
+    box.appendChild(b);
+  }
+  let saved = "night";
+  try { saved = localStorage.getItem("robot-pad-theme") || "night"; } catch (e) {}
+  applyTheme(saved, false);
+})();
 
 // ===== 파이브릭스 허브 BLE 정보 (고정값) =====
 const PYBRICKS_SERVICE = "c5f50001-8280-46da-89f4-6d8051e4aeef";
