@@ -83,8 +83,6 @@
     display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
   }
   .settings h3 small { font-size: 12px; font-weight: 400; color: var(--muted); }
-  .prow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .prow .name { font-size: 13px; color: var(--muted); }
   .sgrid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
   }
@@ -98,7 +96,6 @@
   }
   input[type=number] { width: 100%; min-width: 0; flex: 1; user-select: text; -webkit-user-select: text; }
   select { min-width: 90px; }
-  #robotSel { min-width: 160px; font-size: 16px; }
   input[type=number]:focus, select:focus { outline: none; border-color: var(--accent); }
   .field .unit { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .field .hint { font-size: 12px; color: var(--muted); }
@@ -171,7 +168,6 @@
   .face .cro.on { background: var(--cro); border-color: var(--cro); color: #0f141b; }
 
   .now { text-align: center; }
-  .now .robot { font-size: 13px; color: var(--accent); font-weight: 700; }
   .now .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .now .cmd { font-size: 28px; font-weight: 800; margin-top: 4px; min-width: 150px; }
   .now .key {
@@ -214,15 +210,7 @@
 </div>
 
 <section id="settings" class="settings" hidden>
-  <div class="prow">
-    <span class="name">로봇</span>
-    <select id="robotSel"></select>
-    <button id="newBtn" class="ghost">+ 새 로봇</button>
-    <button id="renameBtn" class="ghost">이름 변경</button>
-    <button id="delBtn" class="ghost">삭제</button>
-  </div>
-
-  <h3>조종</h3>
+  <h3 style="margin-top:0">조종</h3>
   <div class="sgrid">
     <label class="field">
       <span class="name">직진 속도</span>
@@ -304,7 +292,6 @@
   </div>
 
   <div class="now">
-    <div class="robot" id="robotName"></div>
     <div class="label">현재 동작</div>
     <div class="cmd" id="cmdText">정지</div>
     <div class="key" id="cmdKey">S</div>
@@ -319,9 +306,13 @@
   </div>
 </section>
 
-<footer>화면 버튼을 손가락으로 눌러도 조종돼요 · Pybricks Code 탭은 닫고 연결하세요</footer>
+<footer>화면 버튼을 손가락으로 눌러도 조종돼요 · Pybricks Code 탭은 닫고 연결하세요 · <span id="verText"></span></footer>
 
 <script>
+// ===== 앱 버전 (고칠 때마다 올리기) =====
+const APP_VERSION = "v12";
+document.getElementById("verText").textContent = APP_VERSION;
+
 // ===== 파이브릭스 허브 BLE 정보 (고정값) =====
 const PYBRICKS_SERVICE = "c5f50001-8280-46da-89f4-6d8051e4aeef";
 const PYBRICKS_CHAR    = "c5f50002-8280-46da-89f4-6d8051e4aeef";
@@ -554,20 +545,11 @@ function readInputs() {
   }
   return normalize(r);
 }
-function refreshRobotList() {
-  const sel = $("robotSel");
-  sel.innerHTML = "";
-  for (const id in store.robots) sel.add(new Option(store.robots[id].name, id));
-  sel.value = store.current;
-  $("delBtn").disabled = Object.keys(store.robots).length < 2;
-}
 function showSummary() {
   const r = cur();
-  $("robotName").textContent = r.name;
   $("spdText").textContent = `직진 ${r.speed} · 회전 ${r.turn}`;
 }
 function showAll() {
-  refreshRobotList();
   fillInputs(cur());
   showSummary();
 }
@@ -614,45 +596,6 @@ $("saveBtn").addEventListener("click", () => {
 $("resetBtn").addEventListener("click", () => {
   fillInputs({ ...DEFAULTS, name: cur().name });
   setSaveMsg("기본값을 불러왔어요. 저장을 눌러 적용하세요.");
-});
-
-$("robotSel").addEventListener("change", (e) => {
-  store.current = e.target.value;
-  persist();
-  showAll();
-  setSaveMsg(`'${cur().name}' 설정으로 바꿨어요`, "ok");
-  if (ch) restartHub();
-});
-
-$("newBtn").addEventListener("click", () => {
-  const n = Object.keys(store.robots).length + 1;
-  const name = prompt("새 로봇 이름", `로봇 ${n}`);
-  if (name === null) return;
-  const id = "r" + Date.now();
-  store.robots[id] = normalize({ ...readInputs(), name: name.trim() || `로봇 ${n}` });
-  store.current = id;
-  persist();
-  showAll();
-  setSaveMsg("지금 설정을 복사해서 새 로봇을 만들었어요", "ok");
-  if (ch) restartHub();
-});
-
-$("renameBtn").addEventListener("click", () => {
-  const name = prompt("로봇 이름", cur().name);
-  if (name === null || !name.trim()) return;
-  cur().name = name.trim().slice(0, 20);
-  persist();
-  showAll();
-});
-
-$("delBtn").addEventListener("click", () => {
-  if (Object.keys(store.robots).length < 2) return;
-  if (!confirm(`'${cur().name}' 설정을 삭제할까요?`)) return;
-  delete store.robots[store.current];
-  store.current = Object.keys(store.robots)[0];
-  persist();
-  showAll();
-  if (ch) restartHub();
 });
 
 $("settingsBtn").addEventListener("click", () => {
@@ -728,6 +671,7 @@ async function connect() {
 
 function onDisconnected() {
   ch = null;
+  if (updatePending) setTimeout(applyUpdate, 300);   // 조종 중 밀려 있던 업데이트 적용
   ready = false;
   queue.length = 0;
   clearTimeout(waitTimer); clearTimeout(readyTimer);
@@ -816,7 +760,7 @@ function handleHubLine(line) {
   } else if (line === "READY") {
     markReady();
     if (hubErrors.length) setMsg("준비 완료, 하지만 확인 필요: " + hubErrors.join(" / "), true);
-    else setMsg(`준비 완료! '${cur().name}' 조종하세요.`);
+    else setMsg("준비 완료! 조종하세요.");
   } else if (line.startsWith("ERR")) {
     const text = line.slice(3).trim();
     if (!ready) hubErrors.push(text);
@@ -1075,21 +1019,60 @@ document.addEventListener("visibilitychange", () => {
 // ===== 오프라인 사용 (PWA) =====
 if ("serviceWorker" in navigator) {
   // updateViaCache: "none" = 새 버전 확인할 때 캐시 무시
-  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
+  let swReg = null;
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+    .then((r) => { swReg = r; }).catch(() => {});
 
-  // 새 버전이 설치되면: 조종 중이 아닐 때 바로 새로고침해서 적용
   const hadController = !!navigator.serviceWorker.controller;
-  let reloading = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadController || reloading) return;   // 첫 설치 때는 새로고침 안 함
-    if (ch) {
-      setMsg("새 버전을 받았어요. 조종이 끝나면 앱을 껐다 켜 주세요.");
-      return;
-    }
-    reloading = true;
-    location.reload();
+    if (hadController) applyUpdate();   // 첫 설치 때는 새로고침 안 함
   });
 }
+
+// ===== 새 버전 확인 =====
+// 안드로이드는 앱을 닫아도 뒤에 살아 있어서 다시 열면 새로 안 불러옴.
+// 그래서 앱이 다시 보일 때마다, 그리고 5분마다 서버의 버전을 확인함.
+let reloading = false;
+let updatePending = false;
+function applyUpdate() {
+  if (reloading) return;
+  if (ch) {   // 조종 중엔 갑자기 새로고침하지 않음
+    updatePending = true;
+    setMsg("새 버전이 있어요. 조종이 끝나고 연결이 끊기면 자동으로 바뀌어요.");
+    return;
+  }
+  // 인터넷이 느리면 새 화면을 못 받고 계속 새로고침할 수 있어서, 1분에 한 번만
+  let lastTry = 0;
+  try { lastTry = Number(sessionStorage.getItem("robot-pad-reload")) || 0; } catch (e) {}
+  if (Date.now() - lastTry < 60000) {
+    setMsg("새 버전이 있는데 인터넷이 느려서 아직 못 받았어요. 잠시 뒤 앱을 다시 열어 주세요.");
+    return;
+  }
+  try { sessionStorage.setItem("robot-pad-reload", String(Date.now())); } catch (e) {}
+  reloading = true;
+  location.reload();
+}
+async function checkForUpdate() {
+  if (!navigator.onLine || reloading) return;
+  try {
+    const url = new URL("index.html", location.href);
+    url.searchParams.set("t", Date.now());   // GitHub 10분 캐시 건너뜀
+    const res = await fetch(url.href, { cache: "no-store" });
+    if (!res.ok) return;
+    // 서버 화면 안의 버전 숫자 읽기 ("전체 바꾸기"로 버전을 고쳐도 안 깨지게 이 줄엔 같은 글자를 안 씀)
+    const m = (await res.text()).match(/APP_VERSION\s*=\s*"([^"]+)"/);
+    if (m && m[1] !== APP_VERSION) applyUpdate();
+  } catch (e) { /* 인터넷 없음 → 다음에 */ }
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration?.();
+    if (reg) reg.update();
+  } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) checkForUpdate();
+});
+setTimeout(checkForUpdate, 2000);
+setInterval(() => { if (!ch) checkForUpdate(); }, 5 * 60 * 1000);
 </script>
 </body>
 </html>
