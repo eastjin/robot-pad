@@ -101,6 +101,9 @@
   #robotSel { min-width: 160px; font-size: 16px; }
   input[type=number]:focus, select:focus { outline: none; border-color: var(--accent); }
   .field .unit { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .field .hint { font-size: 12px; color: var(--muted); }
+  .field .hint.warn { color: var(--warn); font-weight: 700; }
+  .field input.warn { border-color: var(--warn); }
   .field.wide { grid-column: 1 / -1; }
   .field input[type=range] { width: 100%; accent-color: var(--accent); }
   .chk {
@@ -116,6 +119,7 @@
   .savemsg { font-size: 13px; color: var(--muted); }
   .savemsg.ok { color: var(--ok); }
   .savemsg.err { color: var(--bad); }
+  .savemsg.warn { color: var(--warn); }
 
   .stage {
     flex: 1; margin-top: 14px;
@@ -238,7 +242,6 @@
     <label class="field">
       <span class="name">대각선 곡선 (▲+◀ 등 동시에 누를 때)</span>
       <span class="inrow"><input type="number" id="sDiag" inputmode="numeric"><span class="unit">도/초</span></span>
-      <span class="unit">작을수록 완만하게, 클수록 급하게 돌아요</span>
     </label>
     <label class="field wide">
       <span class="name">회전 방식 · <span class="curve-now" id="curveText"></span></span>
@@ -408,6 +411,62 @@ fillPortSelect(inp.rp, false);
 fillPortSelect(inp.ap, true);
 fillPortSelect(inp.gp, true);
 
+// ===== 숫자 칸 범위 안내 + 넘으면 자동으로 맞춤 =====
+const FIELD_NAMES = {
+  speed: "직진 속도", turn: "회전 속도", arm: "팔 속도", grip: "집게 속도",
+  diag: "대각선 곡선", wheel: "바퀴 지름", axle: "바퀴 간격",
+};
+const FIELD_TIPS = {
+  diag: "작을수록 완만하게, 클수록 급하게 돌아요",
+  turn: "제자리 회전 빠르기",
+};
+const hints = {};
+const MOTOR_MAX_DEG = 1000;   // SPIKE 모터가 실제로 낼 수 있는 대략의 최고 속도 (도/초)
+
+function rangeText(k) {
+  const [lo, hi] = NUM_LIMITS[k];
+  let t = `범위 ${lo} ~ ${hi}`;
+  if (FIELD_TIPS[k]) t += ` · ${FIELD_TIPS[k]}`;
+  if (k === "speed") {
+    const w = Number(inp.wheel.value) || DEFAULTS.wheel;
+    const real = Math.round((w * Math.PI * MOTOR_MAX_DEG) / 360 / 10) * 10;
+    t += ` · 이 바퀴로 실제 최고 약 ${real}`;
+  }
+  return t;
+}
+function resetHint(k) {
+  hints[k].textContent = rangeText(k);
+  hints[k].className = "hint";
+  inp[k].classList.remove("warn");
+}
+// 칸에 적힌 값을 범위 안으로. 바뀌었으면 안내 문구 반환
+function fixField(k) {
+  const raw = String(inp[k].value).trim();
+  const n = Number(raw);
+  if (raw === "" || !Number.isFinite(n)) return null;   // 비우거나 글자면 저장 때 원래 값 유지
+  const [lo, hi] = NUM_LIMITS[k];
+  const v = Math.min(hi, Math.max(lo, Math.round(n)));
+  if (v === n) return null;
+  inp[k].value = v;
+  const why = n > hi ? `최대 ${hi}` : n < lo ? `최소 ${lo}` : "정수만";
+  const note = `${FIELD_NAMES[k]}는 ${why}까지라 ${v}(으)로 맞췄어요`;
+  hints[k].textContent = note;
+  hints[k].className = "hint warn";
+  inp[k].classList.add("warn");
+  return note;
+}
+for (const k in FIELD_NAMES) {
+  const el = inp[k];
+  const [lo, hi] = NUM_LIMITS[k];
+  el.min = lo; el.max = hi; el.step = 1;
+  const h = document.createElement("span");
+  h.className = "hint";
+  el.closest(".field").appendChild(h);
+  hints[k] = h;
+  el.addEventListener("change", () => { resetHint(k); fixField(k); if (k === "wheel") resetHint("speed"); });
+  el.addEventListener("input", () => { resetHint(k); if (k === "wheel") resetHint("speed"); });
+}
+
 function setChip(id, state, text) {
   const el = $(id);
   el.className = "chip " + state;
@@ -476,6 +535,7 @@ function fillInputs(r) {
     else inp[k].value = r[k];
   }
   $("curveText").textContent = curveLabel(r.curve);
+  for (const k in hints) resetHint(k);
 }
 function readInputs() {
   const now = cur();
@@ -521,6 +581,8 @@ document.querySelectorAll("[data-wheel]").forEach((b) => {
 });
 
 $("saveBtn").addEventListener("click", () => {
+  const notes = [];
+  for (const k in FIELD_NAMES) { const n = fixField(k); if (n) notes.push(n); }
   const r = readInputs();
   const problem = portProblem(r);
   if (problem) { setSaveMsg(problem, "err"); return; }
@@ -531,17 +593,17 @@ $("saveBtn").addEventListener("click", () => {
   fillInputs(r);
   showSummary();
 
+  let text, kind = "ok";
   if (ch) {
-    if (structChanged) {
-      restartHub();
-      setSaveMsg("저장됨 · 로봇 구조가 바뀌어 허브를 다시 시작해요", "ok");
-    } else {
-      sendSettings();
-      setSaveMsg("저장됨 · 허브에 적용됨", "ok");
-    }
+    if (structChanged) { restartHub(); text = "저장됨 · 로봇 구조가 바뀌어 허브를 다시 시작해요"; }
+    else { sendSettings(); text = "저장됨 · 허브에 적용됨"; }
+    if (!ok) text += " (이 기기에 저장은 실패)";
   } else {
-    setSaveMsg(ok ? "저장됨 · 허브 연결하면 자동 적용" : "이 기기에 저장 실패", ok ? "ok" : "err");
+    text = ok ? "저장됨 · 허브 연결하면 자동 적용" : "이 기기에 저장 실패";
+    if (!ok) kind = "err";
   }
+  if (notes.length) { text += " · " + notes.join(" / "); kind = kind === "err" ? "err" : "warn"; }
+  setSaveMsg(text, kind);
 });
 
 $("resetBtn").addEventListener("click", () => {
