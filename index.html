@@ -235,6 +235,11 @@
       <span class="name">집게 속도</span>
       <span class="inrow"><input type="number" id="sGrip" inputmode="numeric"><span class="unit">도/초</span></span>
     </label>
+    <label class="field">
+      <span class="name">대각선 곡선 (▲+◀ 등 동시에 누를 때)</span>
+      <span class="inrow"><input type="number" id="sDiag" inputmode="numeric"><span class="unit">도/초</span></span>
+      <span class="unit">작을수록 완만하게, 클수록 급하게 돌아요</span>
+    </label>
     <label class="field wide">
       <span class="name">회전 방식 · <span class="curve-now" id="curveText"></span></span>
       <input type="range" id="sCurve" min="0" max="200" step="10">
@@ -332,14 +337,29 @@ const BTN = {
   up: 12, down: 13, left: 14, right: 15,
 };
 
-// 우선순위 순서대로: [버튼 이름, 허브로 보낼 글자]
+// 방향키 → 허브로 보낼 글자 (두 개 같이 누르면 대각선 곡선 주행)
+//   G: 앞+왼쪽  H: 앞+오른쪽  J: 뒤+왼쪽  K: 뒤+오른쪽
+function dpadCommand(up, down, left, right) {
+  if (up && down) { up = false; down = false; }       // 반대 방향 동시 → 무시
+  if (left && right) { left = false; right = false; }
+  if (up && left) return "G";
+  if (up && right) return "H";
+  if (down && left) return "J";
+  if (down && right) return "K";
+  if (up) return "F";
+  if (down) return "B";
+  if (left) return "L";
+  if (right) return "R";
+  return null;
+}
+// 방향키가 없을 때 우선순위
 const ORDER = [
-  ["up", "F"], ["down", "B"], ["left", "L"], ["right", "R"],
   ["triangle", "T"], ["square", "Q"], ["cross", "X"], ["circle", "O"],
 ];
 
 const LABEL = {
   F: "앞으로", B: "뒤로", L: "왼쪽 회전", R: "오른쪽 회전",
+  G: "앞 왼쪽 곡선", H: "앞 오른쪽 곡선", J: "뒤 왼쪽 곡선", K: "뒤 오른쪽 곡선",
   T: "팔 올리기", Q: "팔 내리기", X: "집게 잡기", O: "집게 펴기", S: "정지",
 };
 
@@ -348,14 +368,14 @@ const PORTS = ["A", "B", "C", "D", "E", "F"];
 const DEFAULTS = {
   name: "로봇 1",
   // 조종
-  speed: 200, turn: 120, curve: 0, arm: 300, grip: 300,
+  speed: 200, turn: 120, curve: 0, arm: 300, grip: 300, diag: 60,
   // 구조
   lp: "E", rp: "F", ap: "A", gp: "D",
   linv: true, rinv: false, ainv: false, ginv: false,
   wheel: 88, axle: 112,
 };
 const NUM_LIMITS = {
-  speed: [50, 800], turn: [30, 500], curve: [0, 200], arm: [50, 1000], grip: [50, 1000],
+  speed: [50, 800], turn: [30, 500], curve: [0, 200], arm: [50, 1000], grip: [50, 1000], diag: [10, 500],
   wheel: [20, 200], axle: [40, 300],
 };
 const STRUCT_KEYS = ["lp", "rp", "ap", "gp", "linv", "rinv", "ainv", "ginv", "wheel", "axle"];
@@ -371,7 +391,7 @@ const btnEls = {};
 document.querySelectorAll("[data-btn]").forEach((el) => { btnEls[el.dataset.btn] = el; });
 
 const inp = {
-  speed: $("sSpeed"), turn: $("sTurn"), curve: $("sCurve"), arm: $("sArm"), grip: $("sGrip"),
+  speed: $("sSpeed"), turn: $("sTurn"), curve: $("sCurve"), arm: $("sArm"), grip: $("sGrip"), diag: $("sDiag"),
   lp: $("sLp"), rp: $("sRp"), ap: $("sAp"), gp: $("sGp"),
   linv: $("sLinv"), rinv: $("sRinv"), ainv: $("sAinv"), ginv: $("sGinv"),
   wheel: $("sWheel"), axle: $("sAxle"),
@@ -782,10 +802,10 @@ function sendConfig() {
   const flags = (r.linv ? 1 : 0) | (r.rinv ? 2 : 0) | (r.ainv ? 4 : 0) | (r.ginv ? 8 : 0);
   sendLine(`C${port(r.lp)}${port(r.rp)}${port(r.ap)}${port(r.gp)},${r.wheel},${r.axle},${flags}\n`);
 }
-// 조종 설정:  P직진,회전,곡선,팔,집게  예) P200,120,0,300,300
+// 조종 설정:  P직진,회전,회전방식,팔,집게,대각선  예) P200,120,0,300,300,60
 function sendSettings() {
   const r = cur();
-  sendLine(`P${r.speed},${r.turn},${r.curve},${r.arm},${r.grip}\n`);
+  sendLine(`P${r.speed},${r.turn},${r.curve},${r.arm},${r.grip},${r.diag}\n`);
 }
 function sendConfigOnce() {
   if (configSent || !ch) return;
@@ -914,8 +934,12 @@ function loop() {
 
   let cmd = "S";
   if (!document.hidden) {   // 화면이 안 보일 땐 무조건 정지
-    for (const [name, c] of ORDER) {
-      if (pressed(name)) { cmd = c; break; }
+    const d = dpadCommand(pressed("up"), pressed("down"), pressed("left"), pressed("right"));
+    if (d) cmd = d;
+    else {
+      for (const [name, c] of ORDER) {
+        if (pressed(name)) { cmd = c; break; }
+      }
     }
   }
   $("cmdText").textContent = LABEL[cmd];

@@ -1,5 +1,5 @@
 // 앱을 고쳐서 다시 올릴 때는 이 버전 숫자를 올려 주세요 (v1 → v2)
-const CACHE = "robot-pad-v5";
+const CACHE = "robot-pad-v6";
 
 const FILES = [
   "./",
