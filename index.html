@@ -860,6 +860,25 @@ function getPad() {
   return null;
 }
 
+// 컨트롤러가 연결돼 있으면, 컨트롤러 버튼이 키보드처럼 화면을 건드리지 않게 막음
+// (안드로이드에선 방향키가 숫자칸 값을 바꾸고, ✕가 포커스된 버튼을 누를 수 있음)
+window.addEventListener("keydown", (e) => {
+  if (!getPad()) return;
+  const t = e.target;
+  const tag = t && t.tagName;
+  const typing = tag === "INPUT" && /^[0-9]$|^Backspace$|^Delete$|^Tab$/.test(e.key);
+  if (typing) return;   // 숫자 직접 입력은 허용
+  if (/^Arrow/.test(e.key) || ((e.key === "Enter" || e.key === " ") && tag !== "INPUT")) {
+    e.preventDefault();
+    if (t && t.blur && t !== document.body) t.blur();
+  }
+}, true);
+
+function releaseFocus() {
+  const a = document.activeElement;
+  if (a && a !== document.body && /^(INPUT|SELECT|BUTTON|TEXTAREA)$/.test(a.tagName)) a.blur();
+}
+
 let padShown = null;
 let prevL1 = false, prevR1 = false;
 
@@ -883,6 +902,9 @@ function loop() {
   };
 
   for (const name in btnEls) btnEls[name].classList.toggle("on", pressed(name));
+
+  // 컨트롤러를 쓰기 시작하면 입력칸·버튼에 남은 커서를 뺌
+  if (pad && pad.buttons.some((b) => b && b.pressed)) releaseFocus();
 
   // L1/R1: 눌린 순간에만 한 번
   const l1 = pressed("l1"), r1 = pressed("r1");
