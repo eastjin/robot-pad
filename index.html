@@ -59,7 +59,7 @@
     padding: 12px 20px; border-radius: 12px; border: 0;
     background: var(--accent); color: #fff; cursor: pointer;
   }
-  button.primary:disabled { opacity: .5; }
+  button.primary:disabled, button.ghost:disabled { opacity: .5; }
   button.ghost {
     font: inherit; font-size: 14px; padding: 10px 14px; border-radius: 12px;
     background: transparent; color: var(--muted); border: 1px solid var(--line); cursor: pointer;
@@ -208,6 +208,7 @@
 <div class="bar">
   <button id="connectBtn" class="primary">허브 연결</button>
   <button id="stopBtn" class="ghost">전체 정지</button>
+  <button id="findBtn" class="ghost" disabled>🔔 내 로봇 찾기</button>
   <button id="settingsBtn" class="ghost">⚙ 설정</button>
   <div id="msg" class="msg">듀얼쇼크 아무 버튼이나 한 번 누르면 인식돼요.</div>
 </div>
@@ -448,8 +449,12 @@ function fixField(k) {
   const v = Math.min(hi, Math.max(lo, Math.round(n)));
   if (v === n) return null;
   inp[k].value = v;
-  const why = n > hi ? `최대 ${hi}` : n < lo ? `최소 ${lo}` : "정수만";
-  const note = `${FIELD_NAMES[k]}는 ${why}까지라 ${v}(으)로 맞췄어요`;
+  const name = FIELD_NAMES[k];
+  const last = name.charCodeAt(name.length - 1);
+  const topic = last >= 0xac00 && last <= 0xd7a3 && (last - 0xac00) % 28 ? "은" : "는";   // 받침 있으면 '은'
+  const note = n > hi ? `${name}${topic} 최대 ${hi}까지라 자동으로 맞췄어요 (→ ${v})`
+             : n < lo ? `${name}${topic} 최소 ${lo}부터라 자동으로 맞췄어요 (→ ${v})`
+             : `${name}${topic} 정수만 돼서 자동으로 맞췄어요 (→ ${v})`;
   hints[k].textContent = note;
   hints[k].className = "hint warn";
   inp[k].classList.add("warn");
@@ -952,7 +957,8 @@ window.addEventListener("keydown", (e) => {
   if (typing) return;   // 숫자 직접 입력은 허용
   if (/^Arrow/.test(e.key) || ((e.key === "Enter" || e.key === " ") && tag !== "INPUT")) {
     e.preventDefault();
-    if (t && t.blur && t !== document.body) t.blur();
+    // 숫자 칸은 값만 안 바뀌게 하고 커서는 그대로 (키보드로 이어서 입력할 수 있게)
+    if (tag !== "INPUT" && t && t.blur && t !== document.body) t.blur();
   }
 }, true);
 
@@ -1015,6 +1021,34 @@ function loop() {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// ===== 내 로봇 찾기 =====
+$("findBtn").addEventListener("click", () => {
+  if (!ch || !ready) return;
+  last = "S";
+  send("I");
+  setMsg(`'${device && device.name ? device.name : "허브"}'가 삐삐 울리고 초록 불이 깜빡이면 내 로봇이에요.`);
+});
+setInterval(() => { $("findBtn").disabled = !(ch && ready); }, 300);
+
+// ===== 학생 실수 방지 =====
+// 안드로이드: 컨트롤러 ○ 버튼이나 뒤로 가기 제스처가 "뒤로 가기"로 처리돼 앱이 닫히는 것 막기
+try {
+  history.pushState({ stay: 1 }, "");
+  window.addEventListener("popstate", () => {
+    history.pushState({ stay: 1 }, "");
+    if (ch && ready) { last = "S"; send("S"); }
+    setMsg("앱을 닫으려면 홈 버튼을 눌러 주세요. (뒤로 가기는 막아 뒀어요)");
+  });
+} catch (e) { /* 지원 안 하면 무시 */ }
+// 화면을 길게 누를 때 뜨는 메뉴·글자 선택 막기
+document.addEventListener("contextmenu", (e) => {
+  if (!(e.target && /^(INPUT|SELECT)$/.test(e.target.tagName))) e.preventDefault();
+});
+// 실수로 창을 닫거나 새로고침할 때 (노트북) 조종 중이면 한 번 물어봄
+window.addEventListener("beforeunload", (e) => {
+  if (ch && ready) { e.preventDefault(); e.returnValue = ""; }
+});
 
 // ===== 안전장치 =====
 $("stopBtn").addEventListener("click", () => { last = "S"; if (ch && ready) send("S"); });
