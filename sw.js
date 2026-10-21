@@ -1,5 +1,5 @@
 // 앱을 고쳐서 다시 올릴 때는 이 버전 숫자를 올려 주세요 (v1 → v2)
-const CACHE = "robot-pad-v6";
+const CACHE = "robot-pad-v7";
 
 const FILES = [
   "./",
@@ -10,8 +10,14 @@ const FILES = [
 ];
 
 // 설치: 파일을 태블릿에 저장
+// cache: "reload" = 브라우저에 남은 예전 파일 말고 서버에서 새로 받아옴
+// (안 그러면 GitHub의 10분 캐시 때문에 새 버전 이름으로 예전 화면이 저장될 수 있음)
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
+  e.waitUntil(
+    caches.open(CACHE).then((c) =>
+      c.addAll(FILES.map((f) => new Request(f, { cache: "reload" })))
+    )
+  );
   self.skipWaiting();
 });
 

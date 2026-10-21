@@ -978,7 +978,21 @@ document.addEventListener("visibilitychange", () => {
 
 // ===== 오프라인 사용 (PWA) =====
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  // updateViaCache: "none" = 새 버전 확인할 때 캐시 무시
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
+
+  // 새 버전이 설치되면: 조종 중이 아닐 때 바로 새로고침해서 적용
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloading) return;   // 첫 설치 때는 새로고침 안 함
+    if (ch) {
+      setMsg("새 버전을 받았어요. 조종이 끝나면 앱을 껐다 켜 주세요.");
+      return;
+    }
+    reloading = true;
+    location.reload();
+  });
 }
 </script>
 </body>
