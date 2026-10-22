@@ -121,6 +121,7 @@
     background: var(--accent); color: var(--accentText); cursor: pointer;
   }
   button.primary:disabled, button.ghost:disabled { opacity: .5; }
+  button[hidden] { display: none; }
   button.ghost {
     font: inherit; font-size: 14px; padding: 10px 14px; border-radius: 12px;
     background: transparent; color: var(--muted); border: 1px solid var(--line); cursor: pointer;
@@ -264,6 +265,7 @@
 
 <div class="bar">
   <button id="connectBtn" class="primary">허브 연결</button>
+  <button id="switchBtn" class="ghost" hidden>🔄 다른 허브</button>
   <button id="stopBtn" class="ghost">전체 정지</button>
   <button id="findBtn" class="ghost" disabled>🔔 내 로봇 찾기</button>
   <button id="settingsBtn" class="ghost">⚙ 설정</button>
@@ -374,7 +376,7 @@
 
 <script>
 // ===== 앱 버전 (고칠 때마다 올리기) =====
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 document.getElementById("verText").textContent = APP_VERSION;
 
 // ===== 화면 색 테마 =====
@@ -731,13 +733,17 @@ function setConnectBtn(text, enabled) {
   connectBtn.disabled = !enabled;
 }
 
+const listened = new WeakMap();   // 허브별로 걸어 둔 알림 함수 (다시 연결할 때 떼고 다시 걸기)
+
 async function connect() {
   try {
     if (!device) {
-      device = await navigator.bluetooth.requestDevice({
+      const d = await navigator.bluetooth.requestDevice({
         filters: [{ services: [PYBRICKS_SERVICE] }],
       });
-      device.addEventListener("gattserverdisconnected", onDisconnected);
+      device = d;
+      // 예전에 연결했던 허브가 늦게 끊겼다고 알려 와도 지금 연결은 건드리지 않게
+      d.addEventListener("gattserverdisconnected", () => { if (d === device) onDisconnected(); });
     }
     setChip("hubChip", "wait", "연결 중...");
     setConnectBtn("연결 중...", false);
@@ -748,7 +754,14 @@ async function connect() {
     programRunning = null;
 
     // 허브가 보내는 메시지 받기 (준비 완료, 오류, 상태)
-    ch.addEventListener("characteristicvaluechanged", onNotify);
+    // 알림 받기: 예전에 걸어 둔 게 있으면 떼고 다시 걸기 (두 번 받지도, 빠뜨리지도 않게)
+    const mine = ch;
+    const old = listened.get(mine);
+    if (old && mine.removeEventListener) mine.removeEventListener("characteristicvaluechanged", old);
+    // 지금 연결된 허브가 보낸 것만 처리 (바꾸기 전 허브가 늦게 보낸 소식은 무시)
+    const handler = (ev) => { if (mine === ch) onNotify(ev); };
+    mine.addEventListener("characteristicvaluechanged", handler);
+    listened.set(mine, handler);
     try { await ch.startNotifications(); } catch (e) { /* 없어도 동작은 함 */ }
 
     setChip("hubChip", "ok", device.name || "허브 연결됨");
@@ -756,7 +769,7 @@ async function connect() {
     await restartHub();
   } catch (e) {
     ch = null;
-    setConnectBtn(device ? "다시 연결" : "허브 연결", true);
+    setConnectBtn(device ? reconnectText() : "허브 연결", true);
     const m = String(e.message || "");
     if (e.name === "NotFoundError" && /cancel/i.test(m)) {
       setChip("hubChip", "", "허브 미연결");
@@ -778,9 +791,36 @@ function onDisconnected() {
   queue.length = 0;
   clearTimeout(waitTimer); clearTimeout(readyTimer);
   setChip("hubChip", "bad", "연결 끊김");
-  setMsg("허브 연결이 끊겼어요. 로봇은 1초 안에 스스로 멈춰요. '다시 연결'을 눌러 주세요.", true);
-  setConnectBtn("다시 연결", true);
+  setMsg("허브 연결이 끊겼어요. 로봇은 1초 안에 스스로 멈춰요. '다시 연결' 또는 '다른 허브'를 눌러 주세요.", true);
+  setConnectBtn(reconnectText(), true);
 }
+
+function reconnectText() {
+  return device && device.name ? `다시 연결 (${device.name})` : "다시 연결";
+}
+
+// ===== 다른 허브로 바꾸기 =====
+// 지금 허브와 연결을 끊고, 허브 고르는 창을 다시 띄움
+$("switchBtn").addEventListener("click", () => {
+  const old = device, oldCh = ch;
+  device = null;          // 이 순간부터 예전 허브 소식은 무시
+  ch = null;
+  ready = false;
+  queue.length = 0;
+  clearTimeout(waitTimer); clearTimeout(readyTimer);
+  if (old) {
+    // 예전 허브: 로봇 정지 → 프로그램 끄기 → 연결 끊기 (뒤에서 처리)
+    const w = (b) => oldCh && (oldCh.writeValueWithResponse ? oldCh.writeValueWithResponse(b) : oldCh.writeValue(b));
+    Promise.resolve()
+      .then(() => w(new Uint8Array([CMD_WRITE_STDIN, 0x53])))   // 'S'
+      .then(() => w(new Uint8Array([CMD_STOP_PROGRAM])))
+      .catch(() => {})
+      .finally(() => { try { old.gatt.disconnect(); } catch (e) {} });
+  }
+  setChip("hubChip", "", "허브 미연결");
+  setConnectBtn("허브 연결", true);
+  connect();              // 허브 고르는 창은 버튼을 누른 바로 그때 열어야 해서 기다리지 않고 바로 호출
+});
 
 // 버튼 하나로: 연결 안 됨 → 연결 / 연결됐는데 프로그램 멈춤 → 다시 시작
 connectBtn.addEventListener("click", () => {
@@ -1075,7 +1115,10 @@ $("findBtn").addEventListener("click", () => {
   send("I");
   setMsg(`'${device && device.name ? device.name : "허브"}'가 삐삐 울리고 초록 불이 깜빡이면 내 로봇이에요.`);
 });
-setInterval(() => { $("findBtn").disabled = !(ch && ready); }, 300);
+setInterval(() => {
+  $("findBtn").disabled = !(ch && ready);
+  $("switchBtn").hidden = !device;   // 한 번이라도 허브를 골랐으면 '다른 허브' 버튼 보이기
+}, 300);
 
 // ===== 학생 실수 방지 =====
 // 안드로이드: 컨트롤러 ○ 버튼이나 뒤로 가기 제스처가 "뒤로 가기"로 처리돼 앱이 닫히는 것 막기
