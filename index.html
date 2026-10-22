@@ -240,6 +240,21 @@
   .now .spd { margin-top: 8px; font-size: 13px; color: var(--muted); }
 
   footer { margin-top: 10px; font-size: 12px; color: var(--muted); text-align: center; }
+  #verBtn {
+    font: inherit; font-size: 12px; color: var(--muted); background: none; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; margin-left: 4px;
+  }
+  .updatebar {
+    display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+    margin: 0 0 12px; padding: 10px 14px; border-radius: 12px;
+    background: var(--accent); color: var(--accentText); font-weight: 700; font-size: 15px;
+  }
+  .updatebar[hidden] { display: none; }
+  .updatebar button {
+    font: inherit; font-size: 14px; font-weight: 800; cursor: pointer;
+    padding: 8px 16px; border-radius: 10px; border: 2px solid currentColor;
+    background: var(--card); color: var(--text);
+  }
 
   @media (max-width: 760px) {
     .stage { grid-template-columns: 1fr 1fr; padding-top: 74px; }
@@ -254,6 +269,11 @@
 </style>
 </head>
 <body>
+
+<div id="updateBar" class="updatebar" hidden>
+  <span id="updateText">새 버전이 있어요</span>
+  <button id="updateNow" type="button">지금 업데이트</button>
+</div>
 
 <header>
   <h1>로봇 조종기</h1>
@@ -372,11 +392,11 @@
   </div>
 </section>
 
-<footer>화면 버튼을 손가락으로 눌러도 조종돼요 · Pybricks Code 탭은 닫고 연결하세요 · <span id="verText"></span></footer>
+<footer>화면 버튼을 손가락으로 눌러도 조종돼요 · Pybricks Code 탭은 닫고 연결하세요 · <span id="verText"></span><button id="verBtn" type="button">업데이트 확인</button></footer>
 
 <script>
 // ===== 앱 버전 (고칠 때마다 올리기) =====
-const APP_VERSION = "v14";
+const APP_VERSION = "v15";
 document.getElementById("verText").textContent = APP_VERSION;
 
 // ===== 화면 색 테마 =====
@@ -1170,54 +1190,134 @@ if ("serviceWorker" in navigator) {
 
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (hadController) applyUpdate();   // 첫 설치 때는 새로고침 안 함
+    if (hadController && !reloading) applyUpdate();   // 첫 설치 때는 새로고침 안 함
   });
 }
 
 // ===== 새 버전 확인 =====
-// 안드로이드는 앱을 닫아도 뒤에 살아 있어서 다시 열면 새로 안 불러옴.
-// 그래서 앱이 다시 보일 때마다, 그리고 5분마다 서버의 버전을 확인함.
+// - 연결 안 됐을 때: 새 버전이 있으면 바로 바뀜
+// - 허브와 연결 중일 때: 화면 맨 위에 "새 버전이 있어요 [지금 업데이트]" 띠를 띄움
+// - "지금 업데이트": 앱이 저장해 둔 예전 파일을 스스로 지우고 최신으로 다시 염
+//   (크롬 설정에서 '데이터 삭제' 하던 걸 대신함. ⚙ 설정값과 테마는 그대로 남음)
 let reloading = false;
 let updatePending = false;
-function applyUpdate() {
+let newVersion = null;
+
+function showUpdateBar(v) {
+  newVersion = v || newVersion;
+  $("updateText").textContent = newVersion
+    ? `새 버전(${newVersion})이 있어요` : "새 버전이 있어요";
+  $("updateBar").hidden = false;
+}
+
+// 저장해 둔 앱 파일·서비스 워커를 지우고 서버에서 새로 열기
+async function forceUpdate() {
   if (reloading) return;
-  if (ch) {   // 조종 중엔 갑자기 새로고침하지 않음
-    updatePending = true;
-    setMsg("새 버전이 있어요. 조종이 끝나고 연결이 끊기면 자동으로 바뀌어요.");
+  reloading = true;
+  $("updateNow").disabled = true;
+  $("updateText").textContent = "최신 버전 받는 중...";
+  $("updateBar").hidden = false;
+
+  // 지우기 전에 서버에 접속되는지 먼저 확인 (안 되면 예전 파일을 지우지 않음 → 오프라인에서도 계속 열림)
+  try {
+    const probe = new URL("index.html", location.href);
+    probe.searchParams.set("t", Date.now());
+    const res = await Promise.race([
+      fetch(probe.href, { cache: "no-store" }),
+      new Promise((_, no) => setTimeout(() => no(new Error("느림")), 8000)),
+    ]);
+    if (!res.ok) throw new Error("서버 응답 이상");
+    // 오프라인 기능이 대신 돌려준 저장본이면 서버 접속 실패로 봄
+    if (res.headers.get("X-Robot-Pad-Cache")) throw new Error("저장본");
+    // 받은 화면이 지금과 같은 버전이면 아직 새 버전을 못 받은 것 (예전 오프라인 기능이 저장본을 준 경우 포함)
+    const m = (await res.text()).match(/APP_VERSION\s*=\s*"([^"]+)"/);
+    if (!m || m[1] === APP_VERSION) throw new Error("새 버전 아님");
+  } catch (e) {
+    reloading = false;
+    $("updateNow").disabled = false;
+    $("updateText").textContent = "인터넷이 안 돼서 업데이트하지 못했어요. 인터넷 연결 후 다시 눌러 주세요.";
     return;
   }
-  // 인터넷이 느리면 새 화면을 못 받고 계속 새로고침할 수 있어서, 1분에 한 번만
+
+  try {
+    if (ch) {   // 허브 연결 중이면 로봇 멈추고 연결 정리
+      last = "S";
+      try { await gattWrite(new Uint8Array([CMD_WRITE_STDIN, 0x53])); } catch (e) {}
+      const d = device;
+      ch = null; ready = false;   // '페이지를 나가시겠어요?' 창이 안 뜨게
+      try { d && d.gatt.disconnect(); } catch (e) {}
+    }
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k.startsWith("robot-pad")).map((k) => caches.delete(k)));
+    }
+  } catch (e) { /* 지우다 실패해도 새로 열기는 함 */ }
+  const url = new URL(location.href);
+  url.searchParams.set("v", Date.now());   // 브라우저·GitHub 캐시 모두 건너뜀
+  location.replace(url.href);
+}
+
+function applyUpdate(v) {
+  if (reloading) return;
+  if (ch) {   // 조종 중엔 갑자기 바꾸지 않고 띠로 알려 줌
+    updatePending = true;
+    showUpdateBar(v);
+    return;
+  }
+  // 인터넷이 느려 계속 새로고침되는 일이 없게, 자동은 1분에 한 번만 (넘으면 띠로 알림)
   let lastTry = 0;
   try { lastTry = Number(sessionStorage.getItem("robot-pad-reload")) || 0; } catch (e) {}
-  if (Date.now() - lastTry < 60000) {
-    setMsg("새 버전이 있는데 인터넷이 느려서 아직 못 받았어요. 잠시 뒤 앱을 다시 열어 주세요.");
-    return;
-  }
+  if (Date.now() - lastTry < 60000) { showUpdateBar(v); return; }
   try { sessionStorage.setItem("robot-pad-reload", String(Date.now())); } catch (e) {}
-  reloading = true;
-  location.reload();
+  forceUpdate();
 }
+
+// 서버의 버전 숫자 확인. 결과: "new" / "same" / "offline"
 async function checkForUpdate() {
-  if (!navigator.onLine || reloading) return;
+  if (reloading) return "same";
+  if (!navigator.onLine) return "offline";
+  let result = "offline";
   try {
     const url = new URL("index.html", location.href);
     url.searchParams.set("t", Date.now());   // GitHub 10분 캐시 건너뜀
     const res = await fetch(url.href, { cache: "no-store" });
-    if (!res.ok) return;
-    // 서버 화면 안의 버전 숫자 읽기 ("전체 바꾸기"로 버전을 고쳐도 안 깨지게 이 줄엔 같은 글자를 안 씀)
-    const m = (await res.text()).match(/APP_VERSION\s*=\s*"([^"]+)"/);
-    if (m && m[1] !== APP_VERSION) applyUpdate();
+    if (res.headers.get("X-Robot-Pad-Cache")) {
+      result = "offline";   // 서버 말고 저장본이 왔음 = 인터넷 안 됨
+    } else if (res.ok) {
+      // 서버 화면 안의 버전 숫자 읽기 ("전체 바꾸기"로 버전을 고쳐도 안 깨지게 이 줄엔 같은 글자를 안 씀)
+      const m = (await res.text()).match(/APP_VERSION\s*=\s*"([^"]+)"/);
+      if (m && m[1] !== APP_VERSION) { result = "new"; applyUpdate(m[1]); }
+      else result = "same";
+    }
   } catch (e) { /* 인터넷 없음 → 다음에 */ }
   try {
     const reg = await navigator.serviceWorker?.getRegistration?.();
-    if (reg) reg.update();
+    if (reg) reg.update().catch(() => {});   // 인터넷 없으면 조용히 다음에
   } catch (e) {}
+  return result;
 }
+
+$("updateNow").addEventListener("click", forceUpdate);
+$("verBtn").addEventListener("click", async () => {
+  $("verBtn").disabled = true;
+  $("verBtn").textContent = "확인 중...";
+  const r = await checkForUpdate();
+  $("verBtn").disabled = false;
+  $("verBtn").textContent = "업데이트 확인";
+  if (r === "same") setMsg(`지금 최신 버전(${APP_VERSION})이에요.`);
+  else if (r === "offline") setMsg("인터넷이 안 돼서 확인하지 못했어요.", true);
+  else if (r === "new" && !reloading) showUpdateBar();
+});
+
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) checkForUpdate();
 });
 setTimeout(checkForUpdate, 2000);
-setInterval(() => { if (!ch) checkForUpdate(); }, 5 * 60 * 1000);
+setInterval(checkForUpdate, 60 * 1000);   // 1분마다 (연결 중이면 띠만 띄움)
 </script>
 </body>
 </html>
